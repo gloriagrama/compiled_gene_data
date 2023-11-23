@@ -1,0 +1,196 @@
+---
+title: "Compiled Gene Data"
+author: "Gloria Grama"
+date: "2023-11-15"
+output:
+  word_document: default
+  html_document: default
+---
+## Goal: Identify and filter genes with the most distinct bimodal distribution. Then use these genes and their expression calls, identify majority call per each cell line (I will be using more genes than less to get a general consensus), and assign the majority call's chromosome complement. 
+
+## Load packages that will be used
+```{r packages}
+
+# check if the package has been installed
+# if not, install it
+if(!require(dplyr)){
+    install.packages("dplyr")
+}
+if(!require(tidyr)){
+    install.packages("tidyr")
+}
+
+# load package for use
+library(dplyr)
+library(tidyr)
+
+```
+
+## Set options for printing reports
+```{r Printoptions}
+
+# this will make sure that the code doesn't run off the page when printing a report
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 50), tidy = TRUE)
+```
+
+## Set directory variables 
+```{r DirectoryVariables}
+
+# store working directory in a variable  
+working_directory = "/home/ggrama/compiled_gene_data/"
+
+# set the working directory 
+setwd(working_directory)
+
+# define the data directory in a variable
+data_directory = "/home/ggrama/compiled_gene_data/"
+```
+
+## Read in data
+``` {r ReadData}
+
+# store csv in a variable
+compiled_data = read.csv(paste0(data_directory,"predicted_sex_Combined.csv"), header = TRUE)
+
+```
+
+
+## Looking at expression counts for each gene in order to determine how distinct each gene's distribution is
+```{r ExpressionCounts}
+
+# table created for each gene in order to gauge general expression category counts
+table(compiled_data$XIST_expression_category)
+table(compiled_data$DDX3Y_expression_category)
+table(compiled_data$EIF1AY_expression_category)
+table(compiled_data$KDM5D_expression_category)
+table(compiled_data$NLGN4Y_expression_category)
+table(compiled_data$RPS4Y1_expression_category)
+table(compiled_data$TMSB4Y_expression_category)
+table(compiled_data$USP9Y_expression_category)
+table(compiled_data$UTY_expression_category)
+table(compiled_data$ZFY_expression_category)
+
+```
+
+## Table only containing expression categories and correlating sex chromosome complements
+```{r ExpressionData}
+
+# created a new data set containing only reported sex and expression category data
+expression_category_data = compiled_data[,c(-3,-5,-7,-9,-11,-13,-15,-17,-19,-21)]
+
+# replace category with its associated sex chromosome complements for XIST first since conditions are different
+expression_category_data$XIST_expression_category[expression_category_data$XIST_expression_category == "high_expression"] <- "XX"
+
+expression_category_data$XIST_expression_category[expression_category_data$XIST_expression_category == "male_range"] <- "XY"
+
+# replace sex chromosome complements for rest of the data frame since values will no longer correlate XIST calls 
+expression_category_data[expression_category_data == "high_expression"] <- "XY"
+
+expression_category_data[expression_category_data == "female_range"] <- "XX"
+```
+
+
+## Checking to see if all genes genes made the same call
+```{r DistinctData}
+
+# code creates a new column containing a TRUE if all values in the row are the same (indicating the same call has been made) or FALSE if there is at least one value that is different
+# ignores NAs that will be called in reported sex column
+# will be used as shell code as changes are made determining what genes will be used
+distinct_data = expression_category_data %>%
+     mutate(eq = apply(pick(DDX3Y_expression_category:ZFY_expression_category), 1, n_distinct, na.rm = T) == 1)
+
+## count number of occurrences of TRUE and FALSE
+distinct_data %>% count(eq)
+```
+
+Psuedocode: Ideally, I could have figured out a way to do this by gene rather than by row, maybe I could have pivoted the data somehow. Then I could have created a grouped bar chart by gene showing its associated TRUEs/FALSEs.
+
+## Making cuts
+
+First, NLGN4Y will be removed from data since it has the highest number of intermediate_expression values indicating that its bimodal distribution is a little more muddy, thus making its calling chromosome calls less reliable. Same analyses will be preformed and results will be compared to determine if data is more defined when NLGN4Y is removed.
+
+``` {r MakingCuts}
+
+# create a new data frame without NLGN4Y
+v1 = expression_category_data[,-7]
+
+# checking calls
+v1 = v1 %>%
+     mutate(eq = apply(pick(DDX3Y_expression_category:ZFY_expression_category), 1, n_distinct, na.rm = T) == 1)
+
+# getting counts
+v1 %>% count(eq)
+```
+
+Now, I'll be removing TMNB4Y but not RPS4Y1. They both called 12 intermediate_expression values, however, TMNB4Y's threshold is disproportionately smaller than RPS4Y1's when accounting for their different max expression values meaing it's values are more distributed. 
+
+``` {r MakingMoreCuts}
+
+## create a new data frame without TMNB4Y
+v2 = expression_category_data[,c(-7, -9)]
+
+# checking calls
+v2 = v2 %>%
+     mutate(eq = apply(pick(DDX3Y_expression_category:ZFY_expression_category), 1, n_distinct, na.rm = T) == 1)
+
+# getting counts
+v2 %>% count(eq)
+```
+
+These results are operating under an alpha level of 0.10, more cuts could be made to attain an alpha level of 0.05, however, I'd like to leave more genes than less in order to gauge a general consensus amongst them in order to make a final decision.  
+
+##Final genes and calls
+
+Final version data will be copied into a new data frame where a new column will be added with the majority call made amongst the rows, thus mitigating the impact of calls that disagree with the majority.
+
+```{r AssignedColumn}
+
+# copy v2 data into a new data frame
+final_genes <- v2
+
+# create an empty column in new data frame to put majority calls in
+final_genes$assigned_sex <- ""
+
+# fill in assigned sex column with sex chromosome complement call made most frequently across XIST, DDX3Y, EIF1AY, KDM5D, RPS4Y1, USP9Y, UTY, and ZFY
+final_genes$assigned_sex <- apply(v2[-1], 1, function(x) {
+  names(which.max(table(factor(x, unique(x)))))
+  })
+```
+
+Psuedocode: Could have done more analysis to see what genes most commonly disagreed. Not exactly sure how I would have done this, I would have to do more research. (Sorry I wish I had a better answer!!)
+
+##Reported sex vs final call
+
+A mock data frame is created in order to compare reported sex to final calls. "Mock" is used because reported sex column values are replaced with their adjacent sex chromosomes for the sake of comparison. This was done in order to get a big picture and see how many cell lines' reported sex differed from the chromosomes that were determined to be present. 
+
+```{r Comparison}
+
+# create a mock data frame to do analyses
+mock_frame = final_genes
+
+# change reported sex to sex chromosome adjacent in order to compare final call to what was reported (mock title was used for this reason)
+mock_frame[mock_frame == "male"] <- "XY"
+mock_frame[mock_frame == "female"] <- "XX"
+
+# isolate columns for analysis
+reported_vs_final = mock_frame[,c(1,2,12)]
+
+# similar to steps preformed above, eq column is created and states whether the associated reported sex chromosomes match (TRUE) or don't match (FALSE) the sex chromosomes determined by gene expression 
+distinct_reported_vs_final = reported_vs_final |>
+mutate(eq = apply(pick(reported_sex:assigned_sex), 1, n_distinct, na.rm = T) == 1)
+
+# returns eq counts
+distinct_reported_vs_final %>% count(eq)
+
+```
+Psuedocode: Here I would have liked to generate a grouped bar chart grouping by chromosome calls measuring counts in reported and assigned sex.  
+
+```{r write.csv}
+
+# create .csv file
+write.csv(final_genes, "/home/ggrama/compiled_gene_data/final_genes.csv", row.names=FALSE)
+```
+
+```{r SessionInfo}
+sessionInfo()
+```
