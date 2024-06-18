@@ -103,8 +103,6 @@ distinct_data = expression_category_data %>%
 distinct_data %>% count(eq)
 ```
 
-Psuedocode: Ideally, I could have figured out a way to do this by gene rather than by row, maybe I could have pivoted the data somehow. Then I could have created a grouped bar chart by gene showing its associated TRUEs/FALSEs.
-
 ## Making cuts
 
 First, NLGN4Y will be removed from data since it has the highest number of intermediate_expression values indicating that its bimodal distribution is a little more muddy, thus making its calling chromosome calls less reliable. Same analyses will be preformed and results will be compared to determine if data is more defined when NLGN4Y is removed.
@@ -157,8 +155,6 @@ final_genes$assigned_sex <- apply(v2[-1], 1, function(x) {
   })
 ```
 
-Psuedocode: Could have done more analysis to see what genes most commonly disagreed. Not exactly sure how I would have done this, I would have to do more research. (Sorry I wish I had a better answer!!)
-
 ##Reported sex vs final call
 
 A mock data frame is created in order to compare reported sex to final calls. "Mock" is used because reported sex column values are replaced with their adjacent sex chromosomes for the sake of comparison. This was done in order to get a big picture and see how many cell lines' reported sex differed from the chromosomes that were determined to be present. 
@@ -182,8 +178,7 @@ mutate(eq = apply(pick(reported_sex:assigned_sex), 1, n_distinct, na.rm = T) == 
 # returns eq counts
 distinct_reported_vs_final %>% count(eq)
 
-```
-Psuedocode: Here I would have liked to generate a grouped bar chart grouping by chromosome calls measuring counts in reported and assigned sex.  
+``` 
 
 ```{r write.csv}
 
